@@ -421,7 +421,7 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoici
   // Each 4-fret zone contributes up to PER_ZONE non-dominated voicings, ensuring
   // both full-neck coverage and enough variety within each position area.
   const ZONE_SIZE = 4;
-  const PER_ZONE  = 2;
+  const PER_ZONE  = 3;
 
   // a dominates b: a covers every fretted note of b and plays at least as many strings
   function dominates(a, b) {
