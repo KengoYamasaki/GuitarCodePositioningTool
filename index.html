@@ -75,22 +75,6 @@
     select:focus { outline: none; border-color: #c9a84c; }
     select:hover  { border-color: #8898aa; }
 
-    #searchBtn {
-      background: #c9a84c;
-      color: #12121e;
-      border: none;
-      padding: 9px 26px;
-      border-radius: 5px;
-      font-size: 0.95rem;
-      font-weight: 700;
-      cursor: pointer;
-      align-self: flex-end;
-      transition: background 0.2s, transform 0.1s;
-      letter-spacing: 0.03em;
-    }
-    #searchBtn:hover  { background: #e8c76d; }
-    #searchBtn:active { transform: scale(0.97); }
-
     /* ── Chord name bar ──────────────────────────────────────── */
     #chordNameDisplay {
       padding: 10px 20px;
@@ -213,14 +197,13 @@
     <select id="rootSelect"></select>
   </div>
   <div class="control-group">
-    <label>コードクオリティ</label>
+    <label>コードタイプ</label>
     <select id="qualitySelect"></select>
   </div>
   <div class="control-group">
-    <label>テンション / 色付け</label>
+    <label>テンション</label>
     <select id="tensionSelect"></select>
   </div>
-  <button id="searchBtn">🔍 コードを検索</button>
 </div>
 
 <div class="legend">
@@ -232,7 +215,7 @@
 </div>
 
 <div id="chordNameDisplay">コードを選択してください</div>
-<div id="diagramsGrid"><div class="loading">コードを選択して「検索」を押してください</div></div>
+<div id="diagramsGrid"><div class="loading">コードを選択してください</div></div>
 <div id="statusBar">ダイアグラムをクリックするとコードが鳴ります 🎵</div>
 
 <script>
@@ -414,6 +397,11 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
         }
         if (hasDupMidi) return;
 
+        // Reject if the two lowest-pitched played strings are both root.
+        // Having root on both 6th and 5th strings (or 5th and 4th) is redundant —
+        // one of them should be muted or play a different chord tone.
+        if (played.length >= 2 && played[0].interval === 0 && played[1].interval === 0) return;
+
         // No more than 1 muted string *between* the outermost played strings
         let first = -1, last = -1;
         for (let i = 0; i < 6; i++) {
@@ -469,10 +457,12 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
   // both full-neck coverage and enough variety within each position area.
   const ZONE_SIZE = 4;
 
-  // a dominates b: a covers every fretted note of b and plays at least as many strings
+  // a dominates b: a covers every fretted note of b, does not replace any open string
+  // of b with a fretted note, and plays at least as many strings.
   function dominates(a, b) {
     for (let i = 0; i < 6; i++) {
-      if (b.frets[i] > 0 && a.frets[i] !== b.frets[i]) return false;
+      if (b.frets[i] > 0 && a.frets[i] !== b.frets[i]) return false; // different fretted note
+      if (b.frets[i] === 0 && a.frets[i] > 0)           return false; // open replaced by fret
     }
     return a.frets.filter(f => f !== -1).length >= b.frets.filter(f => f !== -1).length;
   }
@@ -949,9 +939,8 @@ function renderDiagrams(voicings, tuningMidi, chordName) {
 
 /* ── Boot ─────────────────────────────────────────────────────── */
 populateSelects();
-document.getElementById('searchBtn').addEventListener('click', searchChord);
 
-// Convenience: also search when any select changes
+// Search whenever any select changes
 ['tuningSelect','rootSelect','qualitySelect','tensionSelect'].forEach(id => {
   document.getElementById(id).addEventListener('change', searchChord);
 });
