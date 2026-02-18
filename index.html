@@ -107,7 +107,7 @@
     /* ── Diagrams grid ───────────────────────────────────────── */
     #diagramsGrid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       gap: 14px;
       padding: 18px;
     }
@@ -486,7 +486,16 @@ const INTERVAL_COLORS = {
   1:  '#44aa66',
 };
 
-function drawDiagram(canvas, voicing, chordName) {
+// Note names for MIDI pitch-class → display name
+const NOTE_NAMES_DISP = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+/**
+ * Draw a chord diagram on the canvas.
+ * @param {HTMLCanvasElement} canvas
+ * @param {{frets:number[], intervals:number[]}} voicing
+ * @param {number[]} tuning  - open-string MIDI note numbers [low→high]
+ */
+function drawDiagram(canvas, voicing, tuning) {
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
@@ -497,43 +506,64 @@ function drawDiagram(canvas, voicing, chordName) {
   const NUM_STRINGS = 6;
   const NUM_FRETS   = 5;
 
-  // Determine start fret
+  // Determine start fret (if all non-open frets ≤ 5, show from fret 1; else start at lowest)
   const nonOpen = voicing.frets.filter(f => f > 0);
   let startFret = 1;
   if (nonOpen.length > 0 && Math.max(...nonOpen) > 5) {
     startFret = Math.min(...nonOpen);
   }
 
-  const padTop    = 34;
+  // Layout — enlarged to fit string names row + fret number column
+  const padTop    = 52;   // room for string-name row (y≈10) + open/muted symbols (y≈34)
   const padBottom = 10;
-  const padLeft   = 20;
-  const padRight  = 20;
+  const padLeft   = 28;   // room for fret-number column on the left
+  const padRight  = 10;
   const gridW = W - padLeft - padRight;
   const gridH = H - padTop - padBottom;
   const sGap  = gridW / (NUM_STRINGS - 1);
   const fGap  = gridH / NUM_FRETS;
 
-  // Nut or fret number
+  // ── 1. String note names (topmost row) ───────────────────────
+  ctx.font = 'bold 9px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let s = 0; s < NUM_STRINGS; s++) {
+    const x      = padLeft + s * sGap;
+    const pc     = ((tuning[s] % 12) + 12) % 12;
+    const name   = NOTE_NAMES_DISP[pc];
+    // Root-note strings highlighted in gold, others in muted blue
+    const isRoot = voicing.frets[s] !== -1 && voicing.intervals[s] === 0;
+    ctx.fillStyle = isRoot ? '#e8c76d' : '#7888aa';
+    ctx.fillText(name, x, 11);
+  }
+
+  // ── 2. Nut (thick gold bar when position starts at fret 1) ───
   if (startFret === 1) {
     ctx.fillStyle = '#c9a84c';
     ctx.fillRect(padLeft, padTop, gridW, 4);
-  } else {
-    ctx.fillStyle = '#9aaacc';
-    ctx.font = '11px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(startFret + 'fr', 2, padTop + fGap * 0.5);
   }
 
-  // Fret lines
-  ctx.strokeStyle = '#2e3e5e';
+  // ── 3. Fret lines + fret-number labels on the left ───────────
   ctx.lineWidth = 1;
   for (let f = 0; f <= NUM_FRETS; f++) {
     const y = padTop + f * fGap;
+
+    // Fret line
+    ctx.strokeStyle = '#2e3e5e';
     ctx.beginPath(); ctx.moveTo(padLeft, y); ctx.lineTo(padLeft + gridW, y); ctx.stroke();
+
+    // Fret number label (centred in each fret space, to the left of the grid)
+    if (f < NUM_FRETS) {
+      const fretNum = startFret + f;
+      ctx.fillStyle  = '#5a6a8a';
+      ctx.font       = '9px sans-serif';
+      ctx.textAlign  = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(fretNum), padLeft - 4, y + fGap * 0.5);
+    }
   }
 
-  // String lines (thicker for wound bass strings)
+  // ── 4. String lines (thicker for wound bass strings) ─────────
   for (let s = 0; s < NUM_STRINGS; s++) {
     const x = padLeft + s * sGap;
     ctx.strokeStyle = '#4a5a7a';
@@ -541,25 +571,28 @@ function drawDiagram(canvas, voicing, chordName) {
     ctx.beginPath(); ctx.moveTo(x, padTop); ctx.lineTo(x, padTop + gridH); ctx.stroke();
   }
 
-  // Finger positions
+  // ── 5. Open/muted symbols + fretted dots ─────────────────────
+  const symY = padTop - 16;   // vertical centre of the symbol row
+
   for (let s = 0; s < NUM_STRINGS; s++) {
     const x    = padLeft + s * sGap;
     const fret = voicing.frets[s];
     const intv = voicing.intervals[s];
-    const symY = padTop - 20;
 
     if (fret === -1) {
-      // Muted X
+      // Muted — red ✕
       ctx.strokeStyle = '#e05050';
       ctx.lineWidth = 2;
       const r = 5;
       ctx.beginPath(); ctx.moveTo(x - r, symY - r); ctx.lineTo(x + r, symY + r); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x + r, symY - r); ctx.lineTo(x - r, symY + r); ctx.stroke();
+
     } else if (fret === 0) {
-      // Open circle
+      // Open string — circle (red if root, grey otherwise)
       ctx.strokeStyle = intv === 0 ? '#e05050' : '#9aaacc';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(x, symY, 6, 0, Math.PI * 2); ctx.stroke();
+
     } else {
       // Fretted dot
       const relFret = fret - startFret + 1;
@@ -569,7 +602,7 @@ function drawDiagram(canvas, voicing, chordName) {
       ctx.fillStyle = INTERVAL_COLORS[intv] || '#4488cc';
       ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
 
-      // Interval label
+      // Interval label inside dot
       ctx.fillStyle = '#fff';
       ctx.font = `bold ${Math.max(7, Math.floor(rad * 0.85))}px sans-serif`;
       ctx.textAlign = 'center';
@@ -724,9 +757,9 @@ function renderDiagrams(voicings, tuningMidi, chordName) {
     card.className = 'diagram-card';
 
     const canvas = document.createElement('canvas');
-    canvas.width  = 170;
-    canvas.height = 210;
-    drawDiagram(canvas, voicing, chordName);
+    canvas.width  = 180;   // widened for fret-number column
+    canvas.height = 240;   // heightened for string-name row
+    drawDiagram(canvas, voicing, tuningMidi);
 
     // Info label beneath the diagram
     const nonOpen   = voicing.frets.filter(f => f > 0);
