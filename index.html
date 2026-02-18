@@ -401,6 +401,19 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
         // (tuning is [low→high], so played[0] = lowest-pitched string)
         if (played.length > 0 && played[0].interval !== 0) return;
 
+        // Reject if two strings produce the exact same MIDI pitch.
+        // e.g. low-E fret 5 = MIDI 45 = A, same as open A string (MIDI 45) → redundant.
+        const midiSet = new Set();
+        let hasDupMidi = false;
+        for (let i = 0; i < 6; i++) {
+          if (cur[i] !== null) {
+            const m = tuning[i] + cur[i].fret;
+            if (midiSet.has(m)) { hasDupMidi = true; break; }
+            midiSet.add(m);
+          }
+        }
+        if (hasDupMidi) return;
+
         // No more than 1 muted string *between* the outermost played strings
         let first = -1, last = -1;
         for (let i = 0; i < 6; i++) {
@@ -663,8 +676,15 @@ function drawDiagram(canvas, voicing, tuning) {
     if (atMinFret.length >= 2) {
       const firstStr = Math.min(...atMinFret.map(x => x.str));
       const lastStr  = Math.max(...atMinFret.map(x => x.str));
-      if (lastStr - firstStr >= 3) {          // ≥4 strings span → barre
-        barreInfo = { fret: minFret, fromStr: firstStr, toStr: lastStr };
+      if (lastStr - firstStr >= 3) {          // ≥4 strings span → potential barre
+        // Verify no open strings sit inside the barre span
+        // (a barre finger presses every string in range — none can be open)
+        const hasOpenInSpan = voicing.frets
+          .slice(firstStr, lastStr + 1)
+          .some(f => f === 0);
+        if (!hasOpenInSpan) {
+          barreInfo = { fret: minFret, fromStr: firstStr, toStr: lastStr };
+        }
       }
     }
   }
