@@ -343,8 +343,8 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoici
   const seenKeys   = new Set();
 
   // Search across overlapping 4-fret windows on the neck (up to fret 21)
+  // Each window contributes independently so high-position voicings are not crowded out.
   for (let winStart = 0; winStart <= 17; winStart++) {
-    if (candidates.length >= maxVoicings * 5) break;
     const winEnd = winStart + 4;
 
     // Options per string within this window (open string always available)
@@ -355,11 +355,12 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoici
     // Quick viability check
     if (winOpts.filter(os => os.length > 0).length < 4) continue;
 
-    // Backtracking over 6 strings
+    // Backtracking over 6 strings — limited per window so every position gets a chance
     const cur = new Array(6).fill(null); // null = muted
+    let perWindowAdded = 0;
 
     function bt(si) {
-      if (candidates.length >= maxVoicings * 6) return;
+      if (perWindowAdded >= maxVoicings * 2) return;
       if (si === 6) {
         // ---- validate ----
         const played = cur.filter(c => c !== null);
@@ -386,7 +387,7 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoici
         for (let i = first + 1; i < last; i++) { if (cur[i] === null) mutedInside++; }
         if (mutedInside > 1) return;
 
-        // Deduplicate
+        // Deduplicate by exact fret pattern
         const key = cur.map(c => c === null ? -1 : c.fret).join(',');
         if (seenKeys.has(key)) return;
         seenKeys.add(key);
@@ -395,6 +396,7 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoici
           frets:     cur.map(c => c === null ? -1 : c.fret),
           intervals: cur.map(c => c === null ? -1 : c.interval),
         });
+        perWindowAdded++;
         return;
       }
 
@@ -409,14 +411,27 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoici
     bt(0);
   }
 
-  // Score and pick best
+  // Score all candidates
   candidates.forEach(c => {
     c.score = scoreVoicing(c, tuning, rootNote, baseIntervals, tensionSet);
   });
   candidates.sort((a, b) => b.score - a.score);
 
-  // Return top N unique
-  return candidates.slice(0, maxVoicings);
+  // Remove dominated voicings: if voicing A has the same fretted notes as B
+  // but also plays additional open strings, B is redundant — keep A only.
+  function dominates(a, b) {
+    for (let i = 0; i < 6; i++) {
+      if (b.frets[i] > 0 && a.frets[i] !== b.frets[i]) return false;
+    }
+    return a.frets.filter(f => f !== -1).length >= b.frets.filter(f => f !== -1).length;
+  }
+
+  const result = [];
+  for (const v of candidates) {
+    if (!result.some(r => dominates(r, v))) result.push(v);
+    if (result.length >= maxVoicings) break;
+  }
+  return result;
 }
 
 function scoreVoicing(v, tuning, rootNote, baseIntervals, tensionSet) {
