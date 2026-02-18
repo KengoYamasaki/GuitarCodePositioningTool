@@ -417,21 +417,25 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoici
   });
   candidates.sort((a, b) => b.score - a.score);
 
-  // Remove dominated voicings: if voicing A has the same fretted notes as B
-  // but also plays additional open strings, B is redundant — keep A only.
-  function dominates(a, b) {
-    for (let i = 0; i < 6; i++) {
-      if (b.frets[i] > 0 && a.frets[i] !== b.frets[i]) return false;
+  // Zone-based selection: pick the best voicing per 4-fret neck zone.
+  // This ensures voicings are distributed across the full neck (open → fret 21)
+  // rather than always clustering at the lowest position.
+  // Within each zone the highest-scored voicing wins, which naturally picks the
+  // version that uses open strings over the one that mutes them (more strings = higher score).
+  const ZONE_SIZE = 4;
+  const zoneMap = new Map();
+  for (const v of candidates) {
+    const frettedFrets = v.frets.filter(f => f > 0);
+    const minFret = frettedFrets.length > 0 ? Math.min(...frettedFrets) : 0;
+    const zoneKey = Math.floor(minFret / ZONE_SIZE);
+    if (!zoneMap.has(zoneKey) || v.score > zoneMap.get(zoneKey).score) {
+      zoneMap.set(zoneKey, v);
     }
-    return a.frets.filter(f => f !== -1).length >= b.frets.filter(f => f !== -1).length;
   }
 
-  const result = [];
-  for (const v of candidates) {
-    if (!result.some(r => dominates(r, v))) result.push(v);
-    if (result.length >= maxVoicings) break;
-  }
-  return result;
+  return [...zoneMap.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxVoicings);
 }
 
 function scoreVoicing(v, tuning, rootNote, baseIntervals, tensionSet) {
