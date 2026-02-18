@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ギターコードポジショニングツール</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: #12121e;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, #1a1a3a, #0f2040);
+      padding: 18px 24px;
+      border-bottom: 2px solid #c9a84c;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 {
+      font-size: 1.5rem;
+      color: #c9a84c;
+      letter-spacing: 0.05em;
+    }
+    header .subtitle {
+      font-size: 0.8rem;
+      color: #8898aa;
+      margin-top: 2px;
+    }
+
+    /* ── Controls ────────────────────────────────────────────── */
+    .controls {
+      background: #1a1a2e;
+      padding: 16px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: flex-end;
+      border-bottom: 1px solid #2a2a4a;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    label {
+      font-size: 0.78rem;
+      color: #c9a84c;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    select {
+      background: #0d2040;
+      color: #e0e0e0;
+      border: 1px solid #3a4a6a;
+      padding: 8px 10px;
+      border-radius: 5px;
+      font-size: 0.88rem;
+      cursor: pointer;
+      min-width: 190px;
+      transition: border-color 0.2s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23c9a84c'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 28px;
+    }
+    select:focus { outline: none; border-color: #c9a84c; }
+    select:hover  { border-color: #8898aa; }
+
+    #searchBtn {
+      background: #c9a84c;
+      color: #12121e;
+      border: none;
+      padding: 9px 26px;
+      border-radius: 5px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      align-self: flex-end;
+      transition: background 0.2s, transform 0.1s;
+      letter-spacing: 0.03em;
+    }
+    #searchBtn:hover  { background: #e8c76d; }
+    #searchBtn:active { transform: scale(0.97); }
+
+    /* ── Chord name bar ──────────────────────────────────────── */
+    #chordNameDisplay {
+      padding: 10px 20px;
+      background: #0d2040;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #c9a84c;
+      text-align: center;
+      letter-spacing: 0.06em;
+      min-height: 42px;
+      border-bottom: 1px solid #1e3060;
+    }
+
+    /* ── Diagrams grid ───────────────────────────────────────── */
+    #diagramsGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 14px;
+      padding: 18px;
+    }
+
+    .diagram-card {
+      background: #1a1a2e;
+      border: 2px solid #2a3050;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .diagram-card:hover {
+      border-color: #c9a84c;
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    }
+    .diagram-card.playing {
+      border-color: #e8c76d;
+      box-shadow: 0 0 16px rgba(201,168,76,0.45);
+    }
+    .diagram-card canvas { display: block; }
+
+    .diagram-label {
+      width: 100%;
+      padding: 5px 8px;
+      background: #12122a;
+      font-size: 0.73rem;
+      color: #8898aa;
+      text-align: center;
+      display: flex;
+      justify-content: space-between;
+    }
+    .diagram-label .pos-num { color: #c9a84c; font-weight: 600; }
+
+    /* ── Status / No results ─────────────────────────────────── */
+    #statusBar {
+      padding: 10px 20px;
+      text-align: center;
+      color: #6070a0;
+      font-size: 0.83rem;
+      border-top: 1px solid #1a1a2e;
+      position: sticky;
+      bottom: 0;
+      background: #12121e;
+    }
+    .no-results {
+      grid-column: 1 / -1;
+      padding: 50px;
+      text-align: center;
+      color: #6070a0;
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+
+    /* ── Loading spinner ─────────────────────────────────────── */
+    .loading {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 40px;
+      color: #c9a84c;
+    }
+
+    /* ── Legend ──────────────────────────────────────────────── */
+    .legend {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding: 8px 20px;
+      background: #1a1a2e;
+      border-bottom: 1px solid #2a3050;
+      font-size: 0.76rem;
+      color: #8898aa;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🎸 Guitar Chord Positioning Tool</h1>
+    <div class="subtitle">ギターコードポジショニングツール — ダイアグラムをクリックして音を鳴らそう</div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="control-group">
+    <label>チューニング</label>
+    <select id="tuningSelect"></select>
+  </div>
+  <div class="control-group">
+    <label>ルート音</label>
+    <select id="rootSelect"></select>
+  </div>
+  <div class="control-group">
+    <label>コードクオリティ</label>
+    <select id="qualitySelect"></select>
+  </div>
+  <div class="control-group">
+    <label>テンション / 色付け</label>
+    <select id="tensionSelect"></select>
+  </div>
+  <button id="searchBtn">🔍 コードを検索</button>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><span class="legend-dot" style="background:#e05050"></span> ルート音 (R)</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#4488cc"></span> コード構成音</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#44aa66"></span> テンション音</div>
+  <div class="legend-item"><span style="color:#e05050;font-weight:bold">✕</span> ミュート</div>
+  <div class="legend-item"><span style="border:1.5px solid #aaa;border-radius:50%;width:12px;height:12px;display:inline-block"></span> 開放弦</div>
+</div>
+
+<div id="chordNameDisplay">コードを選択してください</div>
+<div id="diagramsGrid"><div class="loading">コードを選択して「検索」を押してください</div></div>
+<div id="statusBar">ダイアグラムをクリックするとコードが鳴ります 🎵</div>
+
+<script>
+'use strict';
+
+/* ================================================================
+   1. MUSIC THEORY DATA
+   ================================================================ */
+
+// MIDI note numbers: C4=60, E2=40, A2=45 …
+const TUNINGS = [
+  { name: 'スタンダード E  (EADGBE)',          midi: [40, 45, 50, 55, 59, 64] },
+  { name: '半音下げ Eb  (EbAbDbGbBbEb)',        midi: [39, 44, 49, 54, 58, 63] },
+  { name: '1音下げ D  (DADGBE -1step)',          midi: [38, 43, 48, 53, 57, 62] },
+  { name: '1.5音下げ C#  (C#F#BEAD)',            midi: [37, 42, 47, 52, 56, 61] },
+  { name: '2音下げ C  (CGCFAD)',                 midi: [36, 41, 46, 51, 55, 60] },
+  { name: 'ドロップD  (DADGBE)',                 midi: [38, 45, 50, 55, 59, 64] },
+  { name: 'ドロップC#  (C#AbDbGbBbEb)',          midi: [37, 44, 49, 54, 58, 63] },
+  { name: 'ドロップC  (CGCFAD)',                 midi: [36, 43, 48, 53, 57, 62] },
+  { name: 'ドロップB  (BF#BEAD)',                midi: [35, 42, 47, 52, 56, 61] },
+  { name: 'ドロップA  (AEADGB)',                 midi: [33, 40, 45, 50, 54, 59] },
+  { name: 'ダブルドロップD  (DADGBD)',           midi: [38, 45, 50, 55, 59, 62] },
+  { name: 'オープンG  (DGDGBD)',                 midi: [38, 43, 50, 55, 59, 62] },
+  { name: 'オープンD  (DADf♯AD)',               midi: [38, 45, 50, 54, 57, 62] },
+  { name: 'オープンE  (EBEg♯BE)',               midi: [40, 47, 52, 56, 59, 64] },
+  { name: 'オープンA  (EAEAc♯E)',               midi: [40, 45, 52, 57, 61, 64] },
+  { name: 'オープンC  (CGCGCE)',                 midi: [36, 43, 48, 55, 60, 64] },
+  { name: 'DADGAD',                              midi: [38, 45, 50, 55, 57, 62] },
+  { name: 'オープンGm  (DGDGBbD)',              midi: [38, 43, 50, 55, 58, 62] },
+  { name: 'オープンDm  (DADFAd)',               midi: [38, 45, 50, 53, 57, 62] },
+  { name: 'オープンBm  (F#BDF#BD)',             midi: [42, 47, 50, 54, 59, 62] },
+  { name: 'Nashville / High Strung E',           midi: [40, 45, 62, 67, 59, 64] },
+];
+
+const ROOT_NOTES = [
+  { name: 'A',       semitone: 9  },
+  { name: 'A♯/B♭',  semitone: 10 },
+  { name: 'B',       semitone: 11 },
+  { name: 'C',       semitone: 0  },
+  { name: 'C♯/D♭',  semitone: 1  },
+  { name: 'D',       semitone: 2  },
+  { name: 'D♯/E♭',  semitone: 3  },
+  { name: 'E',       semitone: 4  },
+  { name: 'F',       semitone: 5  },
+  { name: 'F♯/G♭',  semitone: 6  },
+  { name: 'G',       semitone: 7  },
+  { name: 'G♯/A♭',  semitone: 8  },
+];
+
+// intervals: semitones from root, normalized 0-11
+const CHORD_QUALITIES = [
+  { name: 'メジャー',                   suffix: '',      intervals: [0, 4, 7]    },
+  { name: 'マイナー',                   suffix: 'm',     intervals: [0, 3, 7]    },
+  { name: 'サスペンデッド4th (sus4)',   suffix: 'sus4',  intervals: [0, 5, 7]    },
+  { name: 'サスペンデッド2nd (sus2)',   suffix: 'sus2',  intervals: [0, 2, 7]    },
+  { name: 'ディミニッシュ (dim)',        suffix: 'dim',   intervals: [0, 3, 6]    },
+  { name: 'オーギュメント (aug)',        suffix: 'aug',   intervals: [0, 4, 8]    },
+  { name: 'パワーコード (5th)',          suffix: '5',     intervals: [0, 7]       },
+];
+
+// tension intervals are also mod-12 (already normalized)
+const TENSIONS = [
+  { name: 'なし',                   intervals: []         },
+  { name: '♭7th  (ドミナント7)',    intervals: [10]       },
+  { name: '7th  (Maj7)',            intervals: [11]       },
+  { name: '♭7 + 9  (9th)',         intervals: [10, 2]    },
+  { name: '♭7 + ♭9  (b9)',        intervals: [10, 1]    },
+  { name: '♭7 + ♯9  (#9)',        intervals: [10, 3]    },
+  { name: '♭7 + 11  (11th)',       intervals: [10, 5]    },
+  { name: '♭7 + ♯11  (#11)',      intervals: [10, 6]    },
+  { name: '♭7 + 13  (13th)',       intervals: [10, 9]    },
+  { name: '♭7 + 9 + 13',          intervals: [10, 2, 9] },
+  { name: 'Maj7 + 9',              intervals: [11, 2]    },
+  { name: 'Maj7 + ♯11',           intervals: [11, 6]    },
+  { name: 'add9',                   intervals: [2]        },
+  { name: '6th',                    intervals: [9]        },
+  { name: '6/9',                    intervals: [9, 2]     },
+];
+
+/* ================================================================
+   2. VOICING GENERATION (backtracking)
+   ================================================================ */
+
+/**
+ * Generate up to `maxVoicings` chord voicings for the given parameters.
+ * @param {number[]} tuning       - MIDI note numbers of open strings [low→high]
+ * @param {number}   rootNote     - root pitch class 0-11
+ * @param {number[]} baseIntervals - quality intervals (mod 12)
+ * @param {number[]} tensionInts  - tension intervals (mod 12)
+ * @param {number}   maxVoicings  - how many to return
+ */
+function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoicings = 12) {
+  const allIntervals = [...new Set([...baseIntervals, ...tensionInts])];
+  const tensionSet   = new Set(tensionInts);
+
+  // Pre-compute: for each string, list of {fret, interval} with chord tones
+  const stringData = tuning.map(openMidi => {
+    const opts = [];
+    for (let fret = 0; fret <= 15; fret++) {
+      const pc       = ((openMidi + fret) % 12 + 12) % 12;
+      const interval = (pc - rootNote + 12) % 12;
+      if (allIntervals.includes(interval)) opts.push({ fret, interval });
+    }
+    return opts;
+  });
+
+  const candidates = [];
+  const seenKeys   = new Set();
+
+  // Search across overlapping 4-fret windows on the neck
+  for (let winStart = 0; winStart <= 12; winStart++) {
+    if (candidates.length >= maxVoicings * 5) break;
+    const winEnd = winStart + 4;
+
+    // Options per string within this window (open string always available)
+    const winOpts = stringData.map(opts =>
+      opts.filter(o => o.fret === 0 || (o.fret >= winStart && o.fret <= winEnd))
+    );
+
+    // Quick viability check
+    if (winOpts.filter(os => os.length > 0).length < 4) continue;
+
+    // Backtracking over 6 strings
+    const cur = new Array(6).fill(null); // null = muted
+
+    function bt(si) {
+      if (candidates.length >= maxVoicings * 6) return;
+      if (si === 6) {
+        // ---- validate ----
+        const played = cur.filter(c => c !== null);
+        if (played.length < 4) return;
+
+        const coveredSet = new Set(played.map(c => c.interval));
+        if (!coveredSet.has(0)) return; // root is mandatory
+
+        // Need at least 2 base intervals
+        const baseCoveredCount = baseIntervals.filter(i => coveredSet.has(i)).length;
+        if (baseCoveredCount < Math.min(2, baseIntervals.length)) return;
+
+        // Check fret span of non-open frets
+        const fretted = cur.filter(c => c !== null && c.fret > 0).map(c => c.fret);
+        if (fretted.length > 1 &&
+            Math.max(...fretted) - Math.min(...fretted) > 4) return;
+
+        // No more than 1 muted string *between* the outermost played strings
+        let first = -1, last = -1;
+        for (let i = 0; i < 6; i++) {
+          if (cur[i] !== null) { if (first === -1) first = i; last = i; }
+        }
+        let mutedInside = 0;
+        for (let i = first + 1; i < last; i++) { if (cur[i] === null) mutedInside++; }
+        if (mutedInside > 1) return;
+
+        // Deduplicate
+        const key = cur.map(c => c === null ? -1 : c.fret).join(',');
+        if (seenKeys.has(key)) return;
+        seenKeys.add(key);
+
+        candidates.push({
+          frets:     cur.map(c => c === null ? -1 : c.fret),
+          intervals: cur.map(c => c === null ? -1 : c.interval),
+        });
+        return;
+      }
+
+      // Options: mute (strings 1-5 only) or play a chord-tone fret
+      const choices = si > 0 ? [null, ...winOpts[si]] : winOpts[si];
+      for (const opt of choices) {
+        cur[si] = opt;
+        bt(si + 1);
+      }
+    }
+
+    bt(0);
+  }
+
+  // Score and pick best
+  candidates.forEach(c => {
+    c.score = scoreVoicing(c, tuning, rootNote, baseIntervals, tensionSet);
+  });
+  candidates.sort((a, b) => b.score - a.score);
+
+  // Return top N unique
+  return candidates.slice(0, maxVoicings);
+}
+
+function scoreVoicing(v, tuning, rootNote, baseIntervals, tensionSet) {
+  let score = 0;
+  const played = v.frets
+    .map((f, i) => ({ fret: f, interval: v.intervals[i], str: i }))
+    .filter(x => x.fret !== -1);
+
+  score += played.length * 8;          // more strings → better
+
+  // Root in bass
+  if (played.length > 0) {
+    const lo = played[0];
+    if (lo.interval === 0) score += 28;
+    else if (lo.interval === 7) score += 8;
+  }
+
+  // Prefer lower position
+  const frettedFrets = played.filter(p => p.fret > 0).map(p => p.fret);
+  if (frettedFrets.length > 0) {
+    const avg = frettedFrets.reduce((s, f) => s + f, 0) / frettedFrets.length;
+    score -= avg * 1.2;
+  }
+
+  // More distinct intervals → better
+  const covered = new Set(played.map(p => p.interval));
+  score += covered.size * 5;
+
+  // All base intervals covered
+  if (baseIntervals.every(i => covered.has(i))) score += 18;
+
+  // Tension notes present
+  for (const t of tensionSet) { if (covered.has(t)) score += 6; }
+
+  // Prefer no muted holes
+  let first = -1, last = -1;
+  for (let i = 0; i < 6; i++) {
+    if (v.frets[i] !== -1) { if (first === -1) first = i; last = i; }
+  }
+  let mutedInside = 0;
+  for (let i = first + 1; i < last; i++) { if (v.frets[i] === -1) mutedInside++; }
+  score -= mutedInside * 8;
+
+  // All 6 strings bonus
+  if (played.length === 6) score += 10;
+
+  return score;
+}
+
+/* ================================================================
+   3. CHORD DIAGRAM DRAWING (Canvas)
+   ================================================================ */
+
+const INTERVAL_LABELS = ['R','♭2','2','♭3','3','4','♭5','5','♭6','6','♭7','7'];
+const INTERVAL_COLORS = {
+  0:  '#e05050', // root  — red
+  3:  '#4488cc', // minor 3rd — blue
+  4:  '#4488cc', // major 3rd — blue
+  7:  '#4488cc', // 5th  — blue
+  6:  '#4488cc', // dim 5th
+  8:  '#4488cc', // aug 5th
+  2:  '#44aa66', // tensions — green
+  5:  '#44aa66',
+  9:  '#44aa66',
+  10: '#44aa66',
+  11: '#44aa66',
+  1:  '#44aa66',
+};
+
+function drawDiagram(canvas, voicing, chordName) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.fillStyle = '#14142a';
+  ctx.fillRect(0, 0, W, H);
+
+  const NUM_STRINGS = 6;
+  const NUM_FRETS   = 5;
+
+  // Determine start fret
+  const nonOpen = voicing.frets.filter(f => f > 0);
+  let startFret = 1;
+  if (nonOpen.length > 0 && Math.max(...nonOpen) > 5) {
+    startFret = Math.min(...nonOpen);
+  }
+
+  const padTop    = 34;
+  const padBottom = 10;
+  const padLeft   = 20;
+  const padRight  = 20;
+  const gridW = W - padLeft - padRight;
+  const gridH = H - padTop - padBottom;
+  const sGap  = gridW / (NUM_STRINGS - 1);
+  const fGap  = gridH / NUM_FRETS;
+
+  // Nut or fret number
+  if (startFret === 1) {
+    ctx.fillStyle = '#c9a84c';
+    ctx.fillRect(padLeft, padTop, gridW, 4);
+  } else {
+    ctx.fillStyle = '#9aaacc';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(startFret + 'fr', 2, padTop + fGap * 0.5);
+  }
+
+  // Fret lines
+  ctx.strokeStyle = '#2e3e5e';
+  ctx.lineWidth = 1;
+  for (let f = 0; f <= NUM_FRETS; f++) {
+    const y = padTop + f * fGap;
+    ctx.beginPath(); ctx.moveTo(padLeft, y); ctx.lineTo(padLeft + gridW, y); ctx.stroke();
+  }
+
+  // String lines (thicker for wound bass strings)
+  for (let s = 0; s < NUM_STRINGS; s++) {
+    const x = padLeft + s * sGap;
+    ctx.strokeStyle = '#4a5a7a';
+    ctx.lineWidth = s < 2 ? 2.2 : 1.2;
+    ctx.beginPath(); ctx.moveTo(x, padTop); ctx.lineTo(x, padTop + gridH); ctx.stroke();
+  }
+
+  // Finger positions
+  for (let s = 0; s < NUM_STRINGS; s++) {
+    const x    = padLeft + s * sGap;
+    const fret = voicing.frets[s];
+    const intv = voicing.intervals[s];
+    const symY = padTop - 20;
+
+    if (fret === -1) {
+      // Muted X
+      ctx.strokeStyle = '#e05050';
+      ctx.lineWidth = 2;
+      const r = 5;
+      ctx.beginPath(); ctx.moveTo(x - r, symY - r); ctx.lineTo(x + r, symY + r); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + r, symY - r); ctx.lineTo(x - r, symY + r); ctx.stroke();
+    } else if (fret === 0) {
+      // Open circle
+      ctx.strokeStyle = intv === 0 ? '#e05050' : '#9aaacc';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, symY, 6, 0, Math.PI * 2); ctx.stroke();
+    } else {
+      // Fretted dot
+      const relFret = fret - startFret + 1;
+      const y   = padTop + (relFret - 0.5) * fGap;
+      const rad = Math.min(sGap, fGap) * 0.36;
+
+      ctx.fillStyle = INTERVAL_COLORS[intv] || '#4488cc';
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+
+      // Interval label
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.max(7, Math.floor(rad * 0.85))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(INTERVAL_LABELS[intv] || '', x, y);
+    }
+  }
+
+  ctx.textBaseline = 'alphabetic';
+}
+
+/* ================================================================
+   4. AUDIO  — Karplus–Strong plucked string synthesis
+   ================================================================ */
+
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+
+function midiToHz(midi) {
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+function karplusStrong(ctx, freq, gainVal, startTime, duration = 3.5) {
+  const sr   = ctx.sampleRate;
+  const N    = Math.max(2, Math.round(sr / freq));
+  const len  = Math.ceil(sr * duration);
+
+  const buf  = ctx.createBuffer(1, len, sr);
+  const data = buf.getChannelData(0);
+
+  // Seed with band-limited noise
+  for (let i = 0; i < N; i++) data[i] = Math.random() * 2 - 1;
+
+  // Karplus–Strong loop (simple averaging low-pass)
+  const decay = 0.4985;
+  for (let i = N; i < len; i++) {
+    data[i] = decay * (data[i - N] + data[i - N + 1]);
+  }
+
+  const src  = ctx.createBufferSource();
+  src.buffer = buf;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(gainVal, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+  src.connect(gain);
+  gain.connect(ctx.destination);
+  src.start(startTime);
+}
+
+/**
+ * Strum all strings with a slight downward delay between them.
+ * @param {number[]} frets     - voicing.frets array (-1=muted)
+ * @param {number[]} tuning    - MIDI open strings
+ * @param {boolean}  strum     - true=strum delay, false=simultaneous
+ */
+function playChord(frets, tuning, strum = true) {
+  const ctx     = getAudioCtx();
+  const now     = ctx.currentTime;
+  const delay   = strum ? 0.026 : 0;
+  let   strIdx  = 0;
+
+  frets.forEach((fret, sIdx) => {
+    if (fret === -1) return;
+    const midi  = tuning[sIdx] + fret;
+    const freq  = midiToHz(midi);
+    const t     = now + strIdx * delay;
+    // Lower strings get a bit more volume
+    const g     = Math.max(0.25, 0.65 - sIdx * 0.04);
+    karplusStrong(ctx, freq, g, t);
+    strIdx++;
+  });
+}
+
+/* ================================================================
+   5. APP — UI wiring
+   ================================================================ */
+
+function populateSelects() {
+  function addOptions(selectId, items, textFn) {
+    const sel = document.getElementById(selectId);
+    items.forEach((item, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = textFn(item);
+      sel.appendChild(opt);
+    });
+  }
+
+  addOptions('tuningSelect',  TUNINGS,         t => t.name);
+  addOptions('rootSelect',    ROOT_NOTES,      r => r.name);
+  addOptions('qualitySelect', CHORD_QUALITIES, q => q.name);
+  addOptions('tensionSelect', TENSIONS,        t => t.name);
+}
+
+function buildChordName(root, quality, tension) {
+  let name = root.name + quality.suffix;
+  if (tension.intervals.length > 0) name += ' ' + tension.name;
+  return name;
+}
+
+function searchChord() {
+  const tuningIdx  = parseInt(document.getElementById('tuningSelect').value,  10);
+  const rootIdx    = parseInt(document.getElementById('rootSelect').value,    10);
+  const qualityIdx = parseInt(document.getElementById('qualitySelect').value, 10);
+  const tensionIdx = parseInt(document.getElementById('tensionSelect').value, 10);
+
+  const tuning  = TUNINGS[tuningIdx];
+  const root    = ROOT_NOTES[rootIdx];
+  const quality = CHORD_QUALITIES[qualityIdx];
+  const tension = TENSIONS[tensionIdx];
+
+  const chordName = buildChordName(root, quality, tension);
+  document.getElementById('chordNameDisplay').textContent =
+    `🎸  ${chordName}  —  ${tuning.name}`;
+
+  const grid = document.getElementById('diagramsGrid');
+  grid.innerHTML = '<div class="loading">ポジションを生成中...</div>';
+
+  // Run after a paint frame so the loading indicator shows
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const voicings = generateVoicings(
+      tuning.midi, root.semitone,
+      quality.intervals, tension.intervals,
+      12
+    );
+    renderDiagrams(voicings, tuning.midi, chordName);
+  }));
+}
+
+function renderDiagrams(voicings, tuningMidi, chordName) {
+  const grid = document.getElementById('diagramsGrid');
+  grid.innerHTML = '';
+
+  if (voicings.length === 0) {
+    grid.innerHTML = `<div class="no-results">
+      このチューニングではポジションが見つかりませんでした。<br>
+      テンションを「なし」にするか、別のチューニングをお試しください。
+    </div>`;
+    return;
+  }
+
+  voicings.forEach((voicing, idx) => {
+    const card   = document.createElement('div');
+    card.className = 'diagram-card';
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = 170;
+    canvas.height = 210;
+    drawDiagram(canvas, voicing, chordName);
+
+    // Info label beneath the diagram
+    const nonOpen   = voicing.frets.filter(f => f > 0);
+    const posStr    = nonOpen.length > 0
+      ? `${Math.min(...nonOpen)}〜${Math.max(...nonOpen)}フレット`
+      : 'オープンポジション';
+    const strCount  = voicing.frets.filter(f => f !== -1).length;
+
+    const label = document.createElement('div');
+    label.className = 'diagram-label';
+    label.innerHTML = `<span class="pos-num">Pos.${idx + 1}</span><span>${posStr} (${strCount}弦)</span>`;
+
+    card.appendChild(canvas);
+    card.appendChild(label);
+
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.diagram-card').forEach(c => c.classList.remove('playing'));
+      card.classList.add('playing');
+      playChord(voicing.frets, tuningMidi, true);
+      document.getElementById('statusBar').textContent =
+        `♪ ${chordName}  Pos.${idx + 1} を再生しています...`;
+      setTimeout(() => {
+        card.classList.remove('playing');
+        document.getElementById('statusBar').textContent =
+          'ダイアグラムをクリックするとコードが鳴ります 🎵';
+      }, 3500);
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+/* ── Boot ─────────────────────────────────────────────────────── */
+populateSelects();
+document.getElementById('searchBtn').addEventListener('click', searchChord);
+
+// Convenience: also search when any select changes
+['tuningSelect','rootSelect','qualitySelect','tensionSelect'].forEach(id => {
+  document.getElementById(id).addEventListener('change', searchChord);
+});
+
+// Initial search with defaults (E major, standard tuning, no tension)
+searchChord();
+</script>
+</body>
+</html>
