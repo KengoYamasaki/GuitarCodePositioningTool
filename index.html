@@ -378,6 +378,19 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
         if (fretted.length > 1 &&
             Math.max(...fretted) - Math.min(...fretted) > 4) return;
 
+        // Finger count: each distinct fret needs one finger (barre = 1 finger for same fret).
+        // A human hand has 4 fingers → reject if more than 4 distinct fret positions.
+        const distinctFretSet = new Set(fretted);
+        if (distinctFretSet.size > 4) return;
+
+        // Tighter stretch at low positions: frets 1-3 are physically wider apart,
+        // so cap the span at 3 frets there.
+        if (fretted.length > 1) {
+          const minFret = Math.min(...fretted);
+          const maxFret = Math.max(...fretted);
+          if (minFret <= 3 && maxFret - minFret > 3) return;
+        }
+
         // No more than 1 muted string *between* the outermost played strings
         let first = -1, last = -1;
         for (let i = 0; i < 6; i++) {
