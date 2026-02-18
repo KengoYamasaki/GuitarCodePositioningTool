@@ -391,18 +391,9 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
           if (minFret <= 3 && maxFret - minFret > 3) return;
         }
 
-        // Open-root bass rule: if the root note is played as an open string on string i,
-        // lower-pitched strings (higher index j > i) must be open (fret=0) or muted.
-        // e.g. string 5 open root → string 6 must not be fretted.
-        // Find the highest-pitched string (lowest index) that has an open root.
-        for (let i = 0; i < 5; i++) {
-          if (cur[i] !== null && cur[i].fret === 0 && cur[i].interval === 0) {
-            for (let j = i + 1; j < 6; j++) {
-              if (cur[j] !== null && cur[j].fret > 0) return;
-            }
-            break;
-          }
-        }
+        // Root-in-bass: the lowest-pitched played string must be the root.
+        // (tuning is [low→high], so played[0] = lowest-pitched string)
+        if (played.length > 0 && played[0].interval !== 0) return;
 
         // No more than 1 muted string *between* the outermost played strings
         let first = -1, last = -1;
@@ -426,8 +417,11 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
         return;
       }
 
-      // Options: mute (strings 1-5 only) or play a chord-tone fret
-      const choices = si > 0 ? [null, ...winOpts[si]] : winOpts[si];
+      // Options: all strings can be muted; for si=0 (low E) prefer playing first
+      // to explore root-in-bass voicings before muted-low-E voicings
+      const choices = si === 0
+        ? [...winOpts[si], null]
+        : [null, ...winOpts[si]];
       for (const opt of choices) {
         cur[si] = opt;
         bt(si + 1);
@@ -513,6 +507,22 @@ function scoreVoicing(v, tuning, rootNote, baseIntervals, tensionSet) {
 
   // Tension notes present
   for (const t of tensionSet) { if (covered.has(t)) score += 6; }
+
+  // Prefer open strings for chord tones (easier to play, resonant sound).
+  // Exception: barre chord contexts naturally skip this because they have no open strings.
+  // Detect barre: if the minimum fretted fret appears on 3+ strings, it's likely a barre.
+  const isBarre = (() => {
+    if (frettedFrets.length === 0) return false;
+    const minF = Math.min(...frettedFrets);
+    return frettedFrets.filter(f => f === minF).length >= 3;
+  })();
+  if (!isBarre) {
+    for (const p of played) {
+      if (p.fret === 0) {
+        score += p.interval === 0 ? 10 : 6; // root open string gets larger bonus
+      }
+    }
+  }
 
   // Prefer no muted holes
   let first = -1, last = -1;
