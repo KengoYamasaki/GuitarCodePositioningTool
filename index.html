@@ -324,7 +324,7 @@ const TENSIONS = [
  * @param {number[]} tensionInts  - tension intervals (mod 12)
  * @param {number}   maxVoicings  - how many to return
  */
-function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoicings = 12) {
+function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
   const allIntervals = [...new Set([...baseIntervals, ...tensionInts])];
   const tensionSet   = new Set(tensionInts);
 
@@ -417,6 +417,14 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoici
   });
   candidates.sort((a, b) => b.score - a.score);
 
+  // Filter: only keep voicings where the lowest played string is the root note
+  const rootBass = candidates.filter(v => {
+    const played = v.frets
+      .map((f, i) => ({ fret: f, interval: v.intervals[i] }))
+      .filter(x => x.fret !== -1);
+    return played.length > 0 && played[0].interval === 0;
+  });
+
   // Zone-based selection: distribute voicings across the full neck (open → fret 21).
   // Each 4-fret zone contributes up to PER_ZONE non-dominated voicings, ensuring
   // both full-neck coverage and enough variety within each position area.
@@ -432,7 +440,7 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoici
   }
 
   const zoneMap = new Map(); // zoneKey → voicing[]
-  for (const v of candidates) {
+  for (const v of rootBass) {
     const frettedFrets = v.frets.filter(f => f > 0);
     const minFret = frettedFrets.length > 0 ? Math.min(...frettedFrets) : 0;
     const zoneKey = Math.floor(minFret / ZONE_SIZE);
@@ -446,8 +454,7 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts, maxVoici
 
   return [...zoneMap.values()]
     .flat()
-    .sort((a, b) => b.score - a.score)
-    .slice(0, maxVoicings);
+    .sort((a, b) => b.score - a.score);
 }
 
 function scoreVoicing(v, tuning, rootNote, baseIntervals, tensionSet) {
@@ -764,8 +771,7 @@ function searchChord() {
   requestAnimationFrame(() => requestAnimationFrame(() => {
     const voicings = generateVoicings(
       tuning.midi, root.semitone,
-      quality.intervals, tension.intervals,
-      12
+      quality.intervals, tension.intervals
     );
     renderDiagrams(voicings, tuning.midi, chordName);
   }));
