@@ -391,6 +391,19 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
           if (minFret <= 3 && maxFret - minFret > 3) return;
         }
 
+        // Open-root bass rule: if the root note is played as an open string on string i,
+        // lower-pitched strings (higher index j > i) must be open (fret=0) or muted.
+        // e.g. string 5 open root → string 6 must not be fretted.
+        // Find the highest-pitched string (lowest index) that has an open root.
+        for (let i = 0; i < 5; i++) {
+          if (cur[i] !== null && cur[i].fret === 0 && cur[i].interval === 0) {
+            for (let j = i + 1; j < 6; j++) {
+              if (cur[j] !== null && cur[j].fret > 0) return;
+            }
+            break;
+          }
+        }
+
         // No more than 1 muted string *between* the outermost played strings
         let first = -1, last = -1;
         for (let i = 0; i < 6; i++) {
@@ -442,7 +455,6 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
   // Each 4-fret zone contributes up to PER_ZONE non-dominated voicings, ensuring
   // both full-neck coverage and enough variety within each position area.
   const ZONE_SIZE = 4;
-  const PER_ZONE  = 3;
 
   // a dominates b: a covers every fretted note of b and plays at least as many strings
   function dominates(a, b) {
@@ -460,7 +472,7 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
     if (!zoneMap.has(zoneKey)) zoneMap.set(zoneKey, []);
     const zoneVoicings = zoneMap.get(zoneKey);
     // Add only if not dominated by any existing voicing in this zone AND zone is not full
-    if (!zoneVoicings.some(r => dominates(r, v)) && zoneVoicings.length < PER_ZONE) {
+    if (!zoneVoicings.some(r => dominates(r, v))) {
       zoneVoicings.push(v);
     }
   }
