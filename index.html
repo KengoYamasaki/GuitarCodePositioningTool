@@ -328,10 +328,16 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
   const allIntervals = [...new Set([...baseIntervals, ...tensionInts])];
   const tensionSet   = new Set(tensionInts);
 
-  // Pre-compute: for each string, list of {fret, interval} with chord tones
+  // Pre-compute: for each string, list of {fret, interval} with chord tones.
+  // If the open string itself is a chord tone, skip fret 12/24 (same pitch class,
+  // just one/two octaves higher — always worse than playing the open string).
   const stringData = tuning.map(openMidi => {
+    const openPc          = ((openMidi % 12) + 12) % 12;
+    const openInterval    = (openPc - rootNote + 12) % 12;
+    const openIsChordTone = allIntervals.includes(openInterval);
     const opts = [];
     for (let fret = 0; fret <= 21; fret++) {
+      if (openIsChordTone && fret > 0 && fret % 12 === 0) continue; // skip octave duplicate of open
       const pc       = ((openMidi + fret) % 12 + 12) % 12;
       const interval = (pc - rootNote + 12) % 12;
       if (allIntervals.includes(interval)) opts.push({ fret, interval });
@@ -644,6 +650,58 @@ function drawDiagram(canvas, voicing, tuning) {
     ctx.beginPath(); ctx.moveTo(x, padTop); ctx.lineTo(x, padTop + gridH); ctx.stroke();
   }
 
+  // ── 4b. Barre chord detection + barre bar ────────────────────
+  // A barre exists when ≥2 fretted strings share the minimum fret
+  // AND that span covers ≥4 strings (index finger barres them all).
+  const frettedForBarre = voicing.frets
+    .map((f, i) => ({ fret: f, str: i }))
+    .filter(x => x.fret > 0);
+  let barreInfo = null;
+  if (frettedForBarre.length >= 2) {
+    const minFret   = Math.min(...frettedForBarre.map(x => x.fret));
+    const atMinFret = frettedForBarre.filter(x => x.fret === minFret);
+    if (atMinFret.length >= 2) {
+      const firstStr = Math.min(...atMinFret.map(x => x.str));
+      const lastStr  = Math.max(...atMinFret.map(x => x.str));
+      if (lastStr - firstStr >= 3) {          // ≥4 strings span → barre
+        barreInfo = { fret: minFret, fromStr: firstStr, toStr: lastStr };
+      }
+    }
+  }
+
+  if (barreInfo) {
+    const relFret = barreInfo.fret - startFret + 1;
+    const barY    = padTop + (relFret - 0.5) * fGap;
+    const x1      = padLeft + barreInfo.fromStr * sGap;
+    const x2      = padLeft + barreInfo.toStr   * sGap;
+    const barH    = Math.min(sGap, fGap) * 0.64;
+    const r       = barH / 2;
+
+    // Pill-shaped (rounded rectangle) barre bar
+    ctx.fillStyle = '#334466';
+    ctx.beginPath();
+    ctx.arc(x1, barY, r, Math.PI * 0.5, Math.PI * 1.5);
+    ctx.arc(x2, barY, r, Math.PI * 1.5, Math.PI * 0.5);
+    ctx.closePath();
+    ctx.fill();
+
+    // Interval-coloured dots + labels inside barre for each barred string
+    const dotRad = Math.min(sGap, fGap) * 0.27;
+    for (let s = barreInfo.fromStr; s <= barreInfo.toStr; s++) {
+      if (voicing.frets[s] === barreInfo.fret) {
+        const bx   = padLeft + s * sGap;
+        const intv = voicing.intervals[s];
+        ctx.fillStyle = INTERVAL_COLORS[intv] || '#4488cc';
+        ctx.beginPath(); ctx.arc(bx, barY, dotRad, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(6, Math.floor(dotRad * 1.0))}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(INTERVAL_LABELS[intv] || '', bx, barY);
+      }
+    }
+  }
+
   // ── 5. Open/muted symbols + fretted dots ─────────────────────
   const symY = padTop - 16;   // vertical centre of the symbol row
 
@@ -667,20 +725,25 @@ function drawDiagram(canvas, voicing, tuning) {
       ctx.beginPath(); ctx.arc(x, symY, 6, 0, Math.PI * 2); ctx.stroke();
 
     } else {
-      // Fretted dot
-      const relFret = fret - startFret + 1;
-      const y   = padTop + (relFret - 0.5) * fGap;
-      const rad = Math.min(sGap, fGap) * 0.36;
+      // Fretted dot — skip strings already rendered inside the barre bar
+      const inBarre = barreInfo &&
+        fret === barreInfo.fret &&
+        s >= barreInfo.fromStr && s <= barreInfo.toStr;
+      if (!inBarre) {
+        const relFret = fret - startFret + 1;
+        const y   = padTop + (relFret - 0.5) * fGap;
+        const rad = Math.min(sGap, fGap) * 0.36;
 
-      ctx.fillStyle = INTERVAL_COLORS[intv] || '#4488cc';
-      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = INTERVAL_COLORS[intv] || '#4488cc';
+        ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
 
-      // Interval label inside dot
-      ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.max(7, Math.floor(rad * 0.85))}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(INTERVAL_LABELS[intv] || '', x, y);
+        // Interval label inside dot
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(7, Math.floor(rad * 0.85))}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(INTERVAL_LABELS[intv] || '', x, y);
+      }
     }
   }
 
