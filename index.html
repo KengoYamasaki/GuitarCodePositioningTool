@@ -360,7 +360,7 @@ function generateVoicings(tuning, rootNote, baseIntervals, tensionInts) {
     let perWindowAdded = 0;
 
     function bt(si) {
-      if (perWindowAdded >= maxVoicings * 2) return;
+      if (perWindowAdded >= 200) return;
       if (si === 6) {
         // ---- validate ----
         const played = cur.filter(c => c !== null);
